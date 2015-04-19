@@ -19,10 +19,15 @@
 #include <uhd/transport/usb_control.hpp>
 #include <boost/thread/mutex.hpp>
 
+#include <boost/format.hpp>
+#include <android/log.h>
+
+#define ALOG(x) __android_log_print(ANDROID_LOG_VERBOSE, "uhd::libusb1_control", x);
+
 using namespace uhd::transport;
 
-usb_control::~usb_control(void){
-    /* NOP */
+usb_control::~usb_control(void)
+{
 }
 
 /***********************************************************************
@@ -33,8 +38,14 @@ public:
     libusb_control_impl(libusb::device_handle::sptr handle, const size_t interface):
         _handle(handle)
     {
-        _handle->claim_interface(interface);
+      ALOG("Claiming USB interface");
+      _handle->claim_interface(interface);
+      ALOG("    Claimed");
     }
+
+    ~libusb_control_impl() {
+    }
+
 
     ssize_t submit(boost::uint8_t request_type,
                   boost::uint8_t request,
@@ -45,14 +56,19 @@ public:
                   boost::int32_t libusb_timeout = 0
     ){
         boost::mutex::scoped_lock lock(_mutex);
-        return libusb_control_transfer(_handle->get(),
-                                       request_type,
-                                       request,
-                                       value,
-                                       index,
-                                       buff,
-                                       length,
-                                       libusb_timeout);
+        ALOG(boost::str(boost::format("Calling libusb_control_transfer, length = %1%") \
+                        % length).c_str());
+        ssize_t ret = libusb_control_transfer(_handle->get(),
+                                              request_type,
+                                              request,
+                                              value,
+                                              index,
+                                              buff,
+                                              length,
+                                              libusb_timeout);
+        ALOG(boost::str(boost::format("    ret = %1%") \
+                        % ret).c_str());
+        return ret;
     }
 
 private:

@@ -37,6 +37,11 @@
 #include <ctime>
 #include <cmath>
 
+#include <android/log.h>
+
+#define ALOG(x) __android_log_print(ANDROID_LOG_VERBOSE, "uhd::b200_impl", x)
+
+
 using namespace uhd;
 using namespace uhd::usrp;
 using namespace uhd::transport;
@@ -109,47 +114,77 @@ static device_addrs_t b200_find(const device_addr_t &hint)
     // This requirement is a courtesy of libusb1.0 on windows.
 
     //find the usrps and load firmware
+    ALOG("getting device list (1)");
     std::vector<usb_device_handle::sptr> uhd_usb_device_vector = usb_device_handle::get_device_list(vid_pid_pair_list);
+    ALOG("got device list (1)");
 
-    BOOST_FOREACH(usb_device_handle::sptr handle, uhd_usb_device_vector) {
-        //extract the firmware path for the b200
-        std::string b200_fw_image;
-        try{
-            b200_fw_image = hint.get("fw", B200_FW_FILE_NAME);
-            b200_fw_image = uhd::find_image_path(b200_fw_image, STR(UHD_IMAGES_DIR)); // FIXME
-        }
-        catch(uhd::exception &e){
-            UHD_MSG(warning) << e.what();
-            return b200_addrs;
-        }
-        UHD_LOG << "the firmware image: " << b200_fw_image << std::endl;
-
-        usb_control::sptr control;
-        try{control = usb_control::make(handle, 0);}
-        catch(const uhd::exception &){continue;} //ignore claimed
-
-        //check if fw was already loaded
-        if (!(handle->firmware_loaded()))
-        {
-            b200_iface::make(control)->load_firmware(b200_fw_image);
-        }
-
-        found++;
-    }
+//    BOOST_FOREACH(usb_device_handle::sptr handle, uhd_usb_device_vector) {
+//        //extract the firmware path for the b200
+//        std::string b200_fw_image;
+//        try{
+//            b200_fw_image = hint.get("fw", B200_FW_FILE_NAME);
+//            //b200_fw_image = uhd::find_image_path(b200_fw_image, STR(UHD_IMAGES_DIR)); // FIXME
+//            b200_fw_image = uhd::find_image_path(b200_fw_image, "/sdcard"); // FIXME
+//        }
+//        catch(uhd::exception &e){
+//            UHD_MSG(warning) << e.what();
+//            return b200_addrs;
+//        }
+//
+//        usb_control::sptr control;
+//        try {
+//          ALOG("calling usb::control::make");
+//          control = usb_control::make(handle, 0);
+//          ALOG("    returned");
+//        }
+//        catch(const uhd::exception &) {
+//          ALOG("    ignore claimed");
+//          continue;
+//        } //ignore claimed
+//
+//        //check if fw was already loaded
+//        ALOG(boost::str(boost::format("checking if firmware loaded: %1%") \
+//                                       % handle->firmware_loaded()).c_str());
+//        if (!(handle->firmware_loaded()))
+//        {
+//          ALOG("firmware NOT loaded");
+//          b200_iface::make(control)->load_firmware(b200_fw_image);
+//          ALOG("    ... loaded");
+//        }
+//
+//        found++;
+//        ALOG("end of foreach");
+//    }
+    found = 1;
 
     const boost::system_time timeout_time = boost::get_system_time() + REENUMERATION_TIMEOUT_MS;
 
     //search for the device until found or timeout
     while (boost::get_system_time() < timeout_time and b200_addrs.empty() and found != 0)
     {
-        BOOST_FOREACH(usb_device_handle::sptr handle, usb_device_handle::get_device_list(vid_pid_pair_list))
+        ALOG("getting device list (2) - foreach");
+        BOOST_FOREACH(usb_device_handle::sptr handle,
+                      usb_device_handle::get_device_list(vid_pid_pair_list))
         {
             usb_control::sptr control;
-            try{control = usb_control::make(handle, 0);}
-            catch(const uhd::exception &){continue;} //ignore claimed
+            try {
+              ALOG("calling usb::control::make");
+              control = usb_control::make(handle, 0);
+              ALOG("    returned");
+            }
+            catch(const uhd::exception &e) {
+              ALOG(e.what());
+              continue;
+            } //ignore claimed
 
+            ALOG("Opening b200_iface");
             b200_iface::sptr iface = b200_iface::make(control);
+            ALOG("Opened, get eeprom");
             const mboard_eeprom_t mb_eeprom = mboard_eeprom_t(*iface, "B200");
+            ALOG("Got eeprom");
+
+            ALOG(boost::str(boost::format("mboard[name]: %1%") \
+                            % mb_eeprom["name"]).c_str());
 
             device_addr_t new_addr;
             new_addr["type"] = "b200";
@@ -157,21 +192,25 @@ static device_addrs_t b200_find(const device_addr_t &hint)
             new_addr["serial"] = handle->get_serial();
             if (not mb_eeprom["product"].empty())
             {
+                ALOG("");
                 switch (boost::lexical_cast<boost::uint16_t>(mb_eeprom["product"]))
                 {
                 //0x0001 and 0x7737 are Ettus B200 product Ids.
                 case 0x0001:
                 case 0x7737:
                 case B200_PRODUCT_NI_ID:
-                    new_addr["product"] = "B200";
-                    break;
+                  ALOG("Got B200");
+                  new_addr["product"] = "B200";
+                  break;
                 //0x0002 and 0x7738 are Ettus B210 product Ids.
                 case 0x0002:
                 case 0x7738:
                 case B210_PRODUCT_NI_ID:
-                    new_addr["product"] = "B210";
-                    break;
-                default: UHD_MSG(error) << "B200 unknown product code: " << mb_eeprom["product"] << std::endl;
+                  ALOG("Got B210");
+                  new_addr["product"] = "B210";
+                  break;
+                default: UHD_MSG(error) << "B200 unknown product code: "
+                                        << mb_eeprom["product"] << std::endl;
                 }
             }
             //this is a found b200 when the hint serial and name match or blank
@@ -182,6 +221,7 @@ static device_addrs_t b200_find(const device_addr_t &hint)
                 b200_addrs.push_back(new_addr);
             }
         }
+        //ALOG("got device list (2) - end foreach");
     }
 
     return b200_addrs;
@@ -197,7 +237,9 @@ static device::sptr b200_make(const device_addr_t &device_addr)
 
 UHD_STATIC_BLOCK(register_b200_device)
 {
+    ALOG("Registering B200");
     device::register_device(&b200_find, &b200_make, device::USRP);
+    ALOG("    Registered");
 }
 
 /***********************************************************************
@@ -256,7 +298,10 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
         vid_pid_pair_list.push_back(usb_device_handle::vid_pid_pair_t(B200_VENDOR_NI_ID,B210_PRODUCT_NI_ID));
     }
 
-    std::vector<usb_device_handle::sptr> device_list = usb_device_handle::get_device_list(vid_pid_pair_list);
+    ALOG("getting device list (3)");
+    std::vector<usb_device_handle::sptr> device_list = \
+      usb_device_handle::get_device_list(vid_pid_pair_list);
+    ALOG("got device list (3)");
 
     //locate the matching handle in the device list
     usb_device_handle::sptr handle;

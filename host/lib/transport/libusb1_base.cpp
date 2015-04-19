@@ -28,6 +28,11 @@
 #include <boost/bind.hpp>
 #include <cstdlib>
 #include <iostream>
+#include <string>
+
+#include <android/log.h>
+
+#define ALOG(x) __android_log_print(ANDROID_LOG_VERBOSE, "uhd::libusb1_base", x);
 
 using namespace uhd;
 using namespace uhd::transport;
@@ -42,9 +47,12 @@ libusb::session::~session(void) {
 class libusb_session_impl : public libusb::session{
 public:
     libusb_session_impl(void){
-        UHD_ASSERT_THROW(libusb_init(&_context) == 0);
-        libusb_set_debug(_context, debug_level);
-        task_handler = task::make(boost::bind(&libusb_session_impl::libusb_event_handler_task, this, _context));
+      //ALOG("libusb_session_impl enter");
+      //UHD_ASSERT_THROW(libusb_init(&_context) == 0);
+      UHD_ASSERT_THROW(libusb_init2(&_context, "/dev/bus/usb") == 0);
+      libusb_set_debug(_context, debug_level);
+      task_handler = task::make(boost::bind(&libusb_session_impl::libusb_event_handler_task, this, _context));
+      //ALOG("libusb_session_impl exit");
     }
 
     ~libusb_session_impl(void){
@@ -82,8 +90,10 @@ libusb::session::sptr libusb::session::get_global_session(void){
     if (not global_session.expired()) return global_session.lock();
 
     //create a new global session
+    //ALOG("libusb_session_impl calling");
     sptr new_global_session(new libusb_session_impl());
     global_session = new_global_session;
+    //ALOG("libusb_session_impl called");
 
     //set logging if envvar is set
     const char *level_string = getenv("LIBUSB_DEBUG_LEVEL");
@@ -93,6 +103,7 @@ libusb::session::sptr libusb::session::get_global_session(void){
         if (level >= 0 and level <= 3) libusb_set_debug(new_global_session->get_context(), level);
     }
 
+    //ALOG("returning new global session");
     return new_global_session;
 }
 
@@ -133,7 +144,9 @@ libusb::device_list::~device_list(void){
 class libusb_device_list_impl : public libusb::device_list{
 public:
     libusb_device_list_impl(void){
+      //ALOG("calling global session");
         libusb::session::sptr sess = libusb::session::get_global_session();
+        //ALOG("called global session");
 
         //allocate a new list of devices
         libusb_device** dev_list;
@@ -145,8 +158,10 @@ public:
             libusb::device::sptr(new libusb_device_impl(dev_list[i]))
         );
 
+        //ALOG("freeing device");
         //free the device list but dont unref (done in ~device)
         libusb_free_device_list(dev_list, false/*dont unref*/);
+        //ALOG("freed device");
     }
 
     size_t size(void) const{
@@ -231,15 +246,22 @@ class libusb_device_handle_impl : public libusb::device_handle{
 public:
     libusb_device_handle_impl(libusb::device::sptr dev){
         _dev = dev;
-        UHD_ASSERT_THROW(libusb_open(_dev->get(), &_handle) == 0);
+        //ALOG("libusb_device_handle_impl called");
+        //UHD_ASSERT_THROW(libusb_open(_dev->get(), &_handle) == 0);
+        UHD_ASSERT_THROW(libusb_open2(_dev->get(), &_handle, 21) == 0);
+        //ALOG("libusb_device_handle_impl returning");
     }
 
     ~libusb_device_handle_impl(void){
         //release all claimed interfaces
+        //ALOG("closing libusb device");
         for (size_t i = 0; i < _claimed.size(); i++){
+          //ALOG("releasing a claimed interface");
             libusb_release_interface(this->get(), _claimed[i]);
         }
+        ALOG("Closing USB device");
         libusb_close(_handle);
+        ALOG("    Closed");
     }
 
     libusb_device_handle *get(void) const{
@@ -247,7 +269,11 @@ public:
     }
 
     void claim_interface(int interface){
-        UHD_ASSERT_THROW(libusb_claim_interface(this->get(), interface) == 0);
+        std::stringstream x;
+        //x << "libusb_claim_interface: " << interface;
+        //ALOG(x.str().c_str());
+        //UHD_ASSERT_THROW(libusb_claim_interface(this->get(), interface) == 0);
+        //ALOG("libusb_claim_interface called");
         _claimed.push_back(interface);
     }
 

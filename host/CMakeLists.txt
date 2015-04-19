@@ -197,6 +197,7 @@ ENDIF(WIN32)
 MESSAGE(STATUS "")
 MESSAGE(STATUS "Configuring Boost C++ Libraries...")
 SET(BOOST_REQUIRED_COMPONENTS
+    chrono
     date_time
     filesystem
     program_options
@@ -205,6 +206,7 @@ SET(BOOST_REQUIRED_COMPONENTS
     thread
     unit_test_framework
     serialization
+    atomic
 )
 
 IF(UNIX AND NOT BOOST_ROOT AND EXISTS "/usr/lib64")
@@ -361,7 +363,9 @@ ENDIF(NOT CMAKE_MODULES_DIR)
 
 # UHDConfig.cmake needs UHD_LINK_LIST_STATIC set:
 LIST(APPEND UHD_LINK_LIST_STATIC "dl")
-LIST(APPEND UHD_LINK_LIST_STATIC "pthread")
+
+#LIST(APPEND UHD_LINK_LIST_STATIC "pthread")
+
 FOREACH(Boost_Comp ${BOOST_REQUIRED_COMPONENTS})
     IF(NOT ${Boost_Comp} STREQUAL "unit_test_framework")
         LIST(APPEND UHD_LINK_LIST_STATIC "boost_${Boost_Comp}")
