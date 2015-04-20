@@ -18,13 +18,13 @@
 #include "b200_impl.hpp"
 #include "b200_regs.hpp"
 #include <uhd/config.hpp>
-#include <uhd/transport/usb_control.hpp>
 #include <uhd/utils/msg.hpp>
 #include <uhd/utils/cast.hpp>
 #include <uhd/exception.hpp>
 #include <uhd/utils/static.hpp>
 #include <uhd/utils/paths.hpp>
 #include <uhd/utils/safe_call.hpp>
+#include <uhd/transport/usb_control.hpp>
 #include <uhd/usrp/dboard_eeprom.hpp>
 #include <boost/format.hpp>
 #include <boost/assign/list_of.hpp>
@@ -39,7 +39,7 @@
 
 #include <android/log.h>
 
-#define ALOG(x) __android_log_print(ANDROID_LOG_VERBOSE, "uhd::b200_impl", x)
+#define ALOG(x) __android_log_print(ANDROID_LOG_VERBOSE, "uhd::b200_impl", x);
 
 
 using namespace uhd;
@@ -51,6 +51,13 @@ static const boost::posix_time::milliseconds REENUMERATION_TIMEOUT_MS(3000);
 //! mapping of frontend to radio perif index
 static const size_t FE1 = 1;
 static const size_t FE2 = 0;
+
+usb_control::sptr get_usb_control(usb_device_handle::sptr handle)
+{
+  ALOG("calling usb_control::make");
+  static usb_control::sptr _control = usb_control::make(handle, 0);
+  return _control;
+}
 
 class b200_ad9361_client_t : public ad9361_params {
 public:
@@ -84,147 +91,130 @@ public:
  **********************************************************************/
 static device_addrs_t b200_find(const device_addr_t &hint)
 {
-    device_addrs_t b200_addrs;
-
-    //return an empty list of addresses when type is set to non-b200
-    if (hint.has_key("type") and hint["type"] != "b200") return b200_addrs;
-
-    //Return an empty list of addresses when an address or resource is specified,
-    //since an address and resource is intended for a different, non-USB, device.
-    BOOST_FOREACH(device_addr_t hint_i, separate_device_addr(hint)) {
-        if (hint_i.has_key("addr") || hint_i.has_key("resource")) return b200_addrs;
-    }
-
-    size_t found = 0;
-    std::vector<usb_device_handle::vid_pid_pair_t> vid_pid_pair_list;//vid pid pair search list for devices.
-
-    if(hint.has_key("vid") && hint.has_key("pid") && hint.has_key("type") && hint["type"] == "b200") {
-        vid_pid_pair_list.push_back(usb_device_handle::vid_pid_pair_t(uhd::cast::hexstr_cast<boost::uint16_t>(hint.get("vid")),
-                                                                    uhd::cast::hexstr_cast<boost::uint16_t>(hint.get("pid"))));
-    } else {
-        vid_pid_pair_list.push_back(usb_device_handle::vid_pid_pair_t(B200_VENDOR_ID, B200_PRODUCT_ID));
-        vid_pid_pair_list.push_back(usb_device_handle::vid_pid_pair_t(B200_VENDOR_NI_ID, B200_PRODUCT_NI_ID));
-        vid_pid_pair_list.push_back(usb_device_handle::vid_pid_pair_t(B200_VENDOR_NI_ID, B210_PRODUCT_NI_ID));
-    }
-
-    // Important note:
-    // The get device list calls are nested inside the for loop.
-    // This allows the usb guts to decontruct when not in use,
-    // so that re-enumeration after fw load can occur successfully.
-    // This requirement is a courtesy of libusb1.0 on windows.
-
-    //find the usrps and load firmware
-    ALOG("getting device list (1)");
-    std::vector<usb_device_handle::sptr> uhd_usb_device_vector = usb_device_handle::get_device_list(vid_pid_pair_list);
-    ALOG("got device list (1)");
-
-//    BOOST_FOREACH(usb_device_handle::sptr handle, uhd_usb_device_vector) {
-//        //extract the firmware path for the b200
-//        std::string b200_fw_image;
-//        try{
-//            b200_fw_image = hint.get("fw", B200_FW_FILE_NAME);
-//            //b200_fw_image = uhd::find_image_path(b200_fw_image, STR(UHD_IMAGES_DIR)); // FIXME
-//            b200_fw_image = uhd::find_image_path(b200_fw_image, "/sdcard"); // FIXME
-//        }
-//        catch(uhd::exception &e){
-//            UHD_MSG(warning) << e.what();
-//            return b200_addrs;
-//        }
+//    device_addrs_t b200_addrs;
 //
-//        usb_control::sptr control;
-//        try {
-//          ALOG("calling usb::control::make");
-//          control = usb_control::make(handle, 0);
-//          ALOG("    returned");
-//        }
-//        catch(const uhd::exception &) {
-//          ALOG("    ignore claimed");
-//          continue;
-//        } //ignore claimed
+//    //return an empty list of addresses when type is set to non-b200
+//    if (hint.has_key("type") and hint["type"] != "b200") return b200_addrs;
 //
-//        //check if fw was already loaded
-//        ALOG(boost::str(boost::format("checking if firmware loaded: %1%") \
-//                                       % handle->firmware_loaded()).c_str());
-//        if (!(handle->firmware_loaded()))
-//        {
-//          ALOG("firmware NOT loaded");
-//          b200_iface::make(control)->load_firmware(b200_fw_image);
-//          ALOG("    ... loaded");
-//        }
-//
-//        found++;
-//        ALOG("end of foreach");
+//    //Return an empty list of addresses when an address or resource is specified,
+//    //since an address and resource is intended for a different, non-USB, device.
+//    BOOST_FOREACH(device_addr_t hint_i, separate_device_addr(hint)) {
+//        if (hint_i.has_key("addr") || hint_i.has_key("resource")) return b200_addrs;
 //    }
-    found = 1;
+//
+//    size_t found = 0;
+//    std::vector<usb_device_handle::vid_pid_pair_t> vid_pid_pair_list;//vid pid pair search list for devices.
+//
+//    if(hint.has_key("vid") && hint.has_key("pid") && hint.has_key("type") && hint["type"] == "b200") {
+//        vid_pid_pair_list.push_back(usb_device_handle::vid_pid_pair_t(uhd::cast::hexstr_cast<boost::uint16_t>(hint.get("vid")),
+//                                                                    uhd::cast::hexstr_cast<boost::uint16_t>(hint.get("pid"))));
+//    } else {
+//        vid_pid_pair_list.push_back(usb_device_handle::vid_pid_pair_t(B200_VENDOR_ID, B200_PRODUCT_ID));
+//        vid_pid_pair_list.push_back(usb_device_handle::vid_pid_pair_t(B200_VENDOR_NI_ID, B200_PRODUCT_NI_ID));
+//        vid_pid_pair_list.push_back(usb_device_handle::vid_pid_pair_t(B200_VENDOR_NI_ID, B210_PRODUCT_NI_ID));
+//    }
+//
+//    // Important note:
+//    // The get device list calls are nested inside the for loop.
+//    // This allows the usb guts to decontruct when not in use,
+//    // so that re-enumeration after fw load can occur successfully.
+//    // This requirement is a courtesy of libusb1.0 on windows.
+//
+//    //find the usrps and load firmware
+//    ALOG("getting device list (1)");
+//    std::vector<usb_device_handle::sptr> uhd_usb_device_vector = \
+//      usb_device_handle::get_device_list(vid_pid_pair_list);
+//    usb_device_handle::sptr handle = uhd_usb_device_vector[0];
+//    ALOG("got device list (1)");
+//
+//    //extract the firmware path for the b200
+//    std::string b200_fw_image;
+//    try{
+//      b200_fw_image = hint.get("fw", B200_FW_FILE_NAME);
+//      b200_fw_image = uhd::find_image_path(b200_fw_image, "/sdcard");
+//    }
+//    catch(uhd::exception &e){
+//      UHD_MSG(warning) << e.what();
+//      return b200_addrs;
+//    }
+//
+//    //check if fw was already loaded
+//    ALOG(boost::str(boost::format("checking if firmware loaded: %1%")   \
+//                    % handle->firmware_loaded()).c_str());
+//    if (!(handle->firmware_loaded())) {
+//      ALOG("firmware NOT loaded");
+//      b200_iface::make(get_usb_control(handle))->load_firmware(b200_fw_image);
+//      ALOG("    ... loaded");
+//    }
+//
+//    found = 1;
+//
+//    const boost::system_time timeout_time = boost::get_system_time() + REENUMERATION_TIMEOUT_MS;
+//
+//    //search for the device until found or timeout
+//    while (boost::get_system_time() < timeout_time and b200_addrs.empty() and found != 0)
+//    {
+//      ALOG("getting device list (2) - foreach");
+//
+//      ALOG("Opening b200_iface");
+//      b200_iface::sptr iface = b200_iface::make(get_usb_control(handle));
+//      ALOG("Opened, get eeprom");
+//      const mboard_eeprom_t mb_eeprom = mboard_eeprom_t(*iface, "B200");
+//      ALOG("Got eeprom");
+//
+//      device_addr_t new_addr;
+//      new_addr["type"] = "b200";
+//      new_addr["name"] = mb_eeprom["name"];
+//      new_addr["serial"] = handle->get_serial();
+//      if (not mb_eeprom["product"].empty()) {
+//        switch (boost::lexical_cast<boost::uint16_t>(mb_eeprom["product"])) {
+//        //0x0001 and 0x7737 are Ettus B200 product Ids.
+//        case 0x0001:
+//        case 0x7737:
+//        case B200_PRODUCT_NI_ID:
+//          ALOG("Got B200");
+//          new_addr["product"] = "B200";
+//          break;
+//        //0x0002 and 0x7738 are Ettus B210 product Ids.
+//        case 0x0002:
+//        case 0x7738:
+//        case B210_PRODUCT_NI_ID:
+//          ALOG("Got B210");
+//          new_addr["product"] = "B210";
+//          break;
+//        default: UHD_MSG(error) << "B200 unknown product code: "
+//                                  << mb_eeprom["product"] << std::endl;
+//        }
+//      }
+//      //this is a found b200 when the hint serial and name match or blank
+//      if (
+//          (not hint.has_key("name")   or hint["name"]   == new_addr["name"]) and
+//            (not hint.has_key("serial") or hint["serial"] == new_addr["serial"])
+//          ){
+//        ALOG("Adding B200 address");
+//        b200_addrs.push_back(new_addr);
+//      }
+//    }
+//
+//    ALOG("Printing info");
+//    ALOG(boost::str(boost::format("B200 name: %1%")
+//                    % b200_addrs[0]["name"]).c_str());
+//    ALOG(boost::str(boost::format("B200 type: %1%")
+//                    % b200_addrs[0]["type"]).c_str());
+//    ALOG(boost::str(boost::format("B200 serial: %1%")
+//                    % b200_addrs[0]["serial"]).c_str());
+//
+//    return b200_addrs;
 
-    const boost::system_time timeout_time = boost::get_system_time() + REENUMERATION_TIMEOUT_MS;
 
-    //search for the device until found or timeout
-    while (boost::get_system_time() < timeout_time and b200_addrs.empty() and found != 0)
-    {
-        ALOG("getting device list (2) - foreach");
-        BOOST_FOREACH(usb_device_handle::sptr handle,
-                      usb_device_handle::get_device_list(vid_pid_pair_list))
-        {
-            usb_control::sptr control;
-            try {
-              ALOG("calling usb::control::make");
-              control = usb_control::make(handle, 0);
-              ALOG("    returned");
-            }
-            catch(const uhd::exception &e) {
-              ALOG(e.what());
-              continue;
-            } //ignore claimed
-
-            ALOG("Opening b200_iface");
-            b200_iface::sptr iface = b200_iface::make(control);
-            ALOG("Opened, get eeprom");
-            const mboard_eeprom_t mb_eeprom = mboard_eeprom_t(*iface, "B200");
-            ALOG("Got eeprom");
-
-            ALOG(boost::str(boost::format("mboard[name]: %1%") \
-                            % mb_eeprom["name"]).c_str());
-
-            device_addr_t new_addr;
-            new_addr["type"] = "b200";
-            new_addr["name"] = mb_eeprom["name"];
-            new_addr["serial"] = handle->get_serial();
-            if (not mb_eeprom["product"].empty())
-            {
-                ALOG("");
-                switch (boost::lexical_cast<boost::uint16_t>(mb_eeprom["product"]))
-                {
-                //0x0001 and 0x7737 are Ettus B200 product Ids.
-                case 0x0001:
-                case 0x7737:
-                case B200_PRODUCT_NI_ID:
-                  ALOG("Got B200");
-                  new_addr["product"] = "B200";
-                  break;
-                //0x0002 and 0x7738 are Ettus B210 product Ids.
-                case 0x0002:
-                case 0x7738:
-                case B210_PRODUCT_NI_ID:
-                  ALOG("Got B210");
-                  new_addr["product"] = "B210";
-                  break;
-                default: UHD_MSG(error) << "B200 unknown product code: "
-                                        << mb_eeprom["product"] << std::endl;
-                }
-            }
-            //this is a found b200 when the hint serial and name match or blank
-            if (
-                (not hint.has_key("name")   or hint["name"]   == new_addr["name"]) and
-                (not hint.has_key("serial") or hint["serial"] == new_addr["serial"])
-            ){
-                b200_addrs.push_back(new_addr);
-            }
-        }
-        //ALOG("got device list (2) - end foreach");
-    }
-
-    return b200_addrs;
+  device_addrs_t b200_addrs;
+  device_addr_t new_addr;
+  new_addr["type"] = "b200";
+  new_addr["name"] = "";
+  new_addr["serial"] = "E8R04Z3B2";
+  new_addr["product"] = "B200";
+  b200_addrs.push_back(new_addr);
+  return b200_addrs;
 }
 
 /***********************************************************************
@@ -301,26 +291,18 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ALOG("getting device list (3)");
     std::vector<usb_device_handle::sptr> device_list = \
       usb_device_handle::get_device_list(vid_pid_pair_list);
+    usb_device_handle::sptr handle = device_list[0];
     ALOG("got device list (3)");
 
-    //locate the matching handle in the device list
-    usb_device_handle::sptr handle;
-    BOOST_FOREACH(usb_device_handle::sptr dev_handle, device_list) {
-        if (dev_handle->get_serial() == device_addr["serial"]){
-            handle = dev_handle;
-            break;
-        }
-    }
-    UHD_ASSERT_THROW(handle.get() != NULL); //better be found
-
     //create control objects
-    usb_control::sptr control = usb_control::make(handle, 0);
-    _iface = b200_iface::make(control);
+    //usb_control::sptr control = usb_control::make(handle, 0);
+    _iface = b200_iface::make(get_usb_control(handle));
     this->check_fw_compat(); //check after making
 
     ////////////////////////////////////////////////////////////////////
     // setup the mboard eeprom
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 0");
     const mboard_eeprom_t mb_eeprom(*_iface, "B200");
     _tree->create<mboard_eeprom_t>(mb_path / "eeprom")
         .set(mb_eeprom)
@@ -329,6 +311,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ////////////////////////////////////////////////////////////////////
     // Load the FPGA image, then reset GPIF
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 1");
     std::string default_file_name;
     std::string product_name = "B200?";
     if (not mb_eeprom["product"].empty())
@@ -358,43 +341,52 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     }
 
     //extract the FPGA path for the B200
-    std::string b200_fpga_image = find_image_path(
-        device_addr.has_key("fpga")? device_addr["fpga"] : default_file_name
-    );
+    ALOG(" ----> 2");
+    std::string b200_fpga_image = "/sdcard/usrp_b200_fgpa.bin";
 
-    boost::uint32_t status = _iface->load_fpga(b200_fpga_image);
+    ALOG(" ----> 3");
+    //boost::uint32_t status = _iface->load_fpga(b200_fpga_image);
+    boost::uint32_t status = 0;
 
     if(status != 0) {
         throw uhd::runtime_error(str(boost::format("fx3 is in state %1%") % status));
     }
 
+    ALOG(" ----> 4");
     _iface->reset_gpif();
 
     ////////////////////////////////////////////////////////////////////
     // Create control transport
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 5");
     boost::uint8_t usb_speed = _iface->get_usb_speed();
     UHD_MSG(status) << "Operating over USB " << (int) usb_speed << "." << std::endl;
     const std::string min_frame_size = (usb_speed == 3) ? "1024" : "512";
 
+    ALOG(" ----> 6");
     device_addr_t ctrl_xport_args;
     ctrl_xport_args["recv_frame_size"] = min_frame_size;
     ctrl_xport_args["num_recv_frames"] = "16";
     ctrl_xport_args["send_frame_size"] = min_frame_size;
     ctrl_xport_args["num_send_frames"] = "16";
 
+    ALOG(" ----> 7");
     _ctrl_transport = usb_zero_copy::make(
         handle,
         4, 8, //interface, endpoint
         3, 4, //interface, endpoint
         ctrl_xport_args
     );
+    ALOG(" ----> 8");
     while (_ctrl_transport->get_recv_buff(0.0)){} //flush ctrl xport
+
+    ALOG(" ----> 9");
     _tree->create<double>(mb_path / "link_max_rate").set((usb_speed == 3) ? B200_MAX_RATE_USB3 : B200_MAX_RATE_USB2);
 
     ////////////////////////////////////////////////////////////////////
     // Async task structure
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 10");
     _async_task_data.reset(new AsyncTaskData());
     _async_task_data->async_md.reset(new async_md_type(1000/*messages deep*/));
     _async_task = uhd::msg_task::make(boost::bind(&b200_impl::handle_async_task, this, _ctrl_transport, _async_task_data));
@@ -402,13 +394,18 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ////////////////////////////////////////////////////////////////////
     // Local control endpoint
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 20");
     _local_ctrl = radio_ctrl_core_3000::make(false/*lilE*/, _ctrl_transport, zero_copy_if::sptr()/*null*/, B200_LOCAL_CTRL_SID);
+    ALOG(" ----> 21");
     _local_ctrl->hold_task(_async_task);
+    ALOG(" ----> 22");
     _async_task_data->local_ctrl = _local_ctrl; //weak
+    ALOG(" ----> 23");
     this->check_fpga_compat();
 
     /* Initialize the GPIOs, set the default bandsels to the lower range. Note
      * that calling update_bandsel calls update_gpio_state(). */
+    ALOG(" ----> 30");
     _gpio_state = gpio_state();
     update_bandsel("RX", 800e6);
     update_bandsel("TX", 850e6);
@@ -416,11 +413,13 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ////////////////////////////////////////////////////////////////////
     // Create the GPSDO control
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 40");
     _async_task_data->gpsdo_uart = b200_uart::make(_ctrl_transport, B200_TX_GPS_UART_SID);
     _async_task_data->gpsdo_uart->set_baud_divider(B200_BUS_CLOCK_RATE/115200);
     _async_task_data->gpsdo_uart->write_uart("\n"); //cause the baud and response to be setup
     boost::this_thread::sleep(boost::posix_time::seconds(1)); //allow for a little propagation
 
+    ALOG(" ----> 50");
     if ((_local_ctrl->peek32(RB32_CORE_STATUS) & 0xff) != B200_GPSDO_ST_NONE)
     {
         UHD_MSG(status) << "Detecting internal GPSDO.... " << std::flush;
@@ -450,6 +449,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ////////////////////////////////////////////////////////////////////
     // Initialize the properties tree
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 60");
     _tree->create<std::string>("/name").set("B-Series Device");
     _tree->create<std::string>(mb_path / "name").set(product_name);
     _tree->create<std::string>(mb_path / "codename").set("Sasquatch");
@@ -460,43 +460,54 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     // be in the FPGAs buffers doesn't get pulled into the transport
     // before being cleared.
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 70");
     device_addr_t data_xport_args;
     data_xport_args["recv_frame_size"] = device_addr.get("recv_frame_size", "8192");
     data_xport_args["num_recv_frames"] = device_addr.get("num_recv_frames", "16");
     data_xport_args["send_frame_size"] = device_addr.get("send_frame_size", "8192");
     data_xport_args["num_send_frames"] = device_addr.get("num_send_frames", "16");
 
+    ALOG(" ----> 80");
     _data_transport = usb_zero_copy::make(
         handle,        // identifier
         2, 6,          // IN interface, endpoint
         1, 2,          // OUT interface, endpoint
         data_xport_args    // param hints
     );
+    ALOG(" ----> 81");
     while (_data_transport->get_recv_buff(0.0)){} //flush ctrl xport
+    ALOG(" ----> 82");
     _demux = recv_packet_demuxer_3000::make(_data_transport);
 
     ////////////////////////////////////////////////////////////////////
     // create time and clock control objects
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 83");
     _spi_iface = b200_local_spi_core::make(_local_ctrl);
+    ALOG(" ----> 84");
     _adf4001_iface = boost::make_shared<b200_ref_pll_ctrl>(_spi_iface);
 
     ////////////////////////////////////////////////////////////////////
     // Init codec - turns on clocks
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 85");
     UHD_MSG(status) << "Initialize CODEC control..." << std::endl;
     ad9361_params::sptr client_settings = boost::make_shared<b200_ad9361_client_t>();
+    ALOG(" ----> 86");
     _codec_ctrl = ad9361_ctrl::make_spi(client_settings, _spi_iface, AD9361_SLAVENO);
+    ALOG(" ----> 87");
     this->reset_codec_dcm();
 
     ////////////////////////////////////////////////////////////////////
     // create codec control objects
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 88");
     {
         const fs_path codec_path = mb_path / ("rx_codecs") / "A";
         _tree->create<std::string>(codec_path / "name").set(product_name+" RX dual ADC");
         _tree->create<int>(codec_path / "gains"); //empty cuz gains are in frontend
     }
+    ALOG(" ----> 89");
     {
         const fs_path codec_path = mb_path / ("tx_codecs") / "A";
         _tree->create<std::string>(codec_path / "name").set(product_name+" TX dual DAC");
@@ -506,6 +517,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ////////////////////////////////////////////////////////////////////
     // create clock control objects
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 90");
     _tree->create<double>(mb_path / "tick_rate")
         .coerce(boost::bind(&b200_impl::set_tick_rate, this, _1))
         .publish(boost::bind(&b200_impl::get_tick_rate, this))
@@ -516,12 +528,14 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ////////////////////////////////////////////////////////////////////
     // and do the misc mboard sensors
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 100");
     _tree->create<sensor_value_t>(mb_path / "sensors" / "ref_locked")
         .publish(boost::bind(&b200_impl::get_ref_locked, this));
 
     ////////////////////////////////////////////////////////////////////
     // create frontend mapping
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 110");
     std::vector<size_t> default_map(2, 0); default_map[1] = 1; // Set this to A->0 B->1 even if there's only A
     _tree->create<std::vector<size_t> >(mb_path / "rx_chan_dsp_mapping").set(default_map);
     _tree->create<std::vector<size_t> >(mb_path / "tx_chan_dsp_mapping").set(default_map);
@@ -535,6 +549,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ////////////////////////////////////////////////////////////////////
     // setup radio control
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 120");
     UHD_MSG(status) << "Initialize Radio control..." << std::endl;
     const size_t num_radio_chains = ((_local_ctrl->peek32(RB32_CORE_STATUS) >> 8) & 0xff);
     UHD_ASSERT_THROW(num_radio_chains > 0);
@@ -543,6 +558,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     for (size_t i = 0; i < _radio_perifs.size(); i++) this->setup_radio(i);
 
     //now test each radio module's connection to the codec interface
+    ALOG(" ----> 130");
     _codec_ctrl->data_port_loopback(true);
     BOOST_FOREACH(radio_perifs_t &perif, _radio_perifs)
     {
@@ -551,10 +567,12 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     _codec_ctrl->data_port_loopback(false);
 
     //register time now and pps onto available radio cores
+    ALOG(" ----> 140");
     _tree->create<time_spec_t>(mb_path / "time" / "now")
         .publish(boost::bind(&time_core_3000::get_time_now, _radio_perifs[0].time64));
     _tree->create<time_spec_t>(mb_path / "time" / "pps")
         .publish(boost::bind(&time_core_3000::get_time_last_pps, _radio_perifs[0].time64));
+    ALOG(" ----> 150");
     for (size_t i = 0; i < _radio_perifs.size(); i++)
     {
         _tree->access<time_spec_t>(mb_path / "time" / "now")
@@ -564,6 +582,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     }
 
     //setup time source props
+    ALOG(" ----> 160");
     _tree->create<std::string>(mb_path / "time_source" / "value")
         .subscribe(boost::bind(&b200_impl::update_time_source, this, _1));
     static const std::vector<std::string> time_sources = boost::assign::list_of("none")("internal")("external")("gpsdo");
@@ -577,6 +596,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ////////////////////////////////////////////////////////////////////
     // front panel gpio
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 170");
     _radio_perifs[0].fp_gpio = gpio_core_200::make(_radio_perifs[0].ctrl, TOREG(SR_FP_GPIO), RB32_FP_GPIO);
     BOOST_FOREACH(const gpio_attr_map_t::value_type attr, gpio_attr_map)
     {
@@ -590,6 +610,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ////////////////////////////////////////////////////////////////////
     // dboard eeproms but not really
     ////////////////////////////////////////////////////////////////////
+    ALOG(" ----> 180");
     dboard_eeprom_t db_eeprom;
     _tree->create<dboard_eeprom_t>(mb_path / "dboards" / "A" / "rx_eeprom").set(db_eeprom);
     _tree->create<dboard_eeprom_t>(mb_path / "dboards" / "A" / "tx_eeprom").set(db_eeprom);
@@ -600,6 +621,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     ////////////////////////////////////////////////////////////////////
 
     //init the clock rate to something reasonable
+    ALOG(" ----> 190");
     _tree->access<double>(mb_path / "tick_rate").set(
         device_addr.cast<double>("master_clock_rate", B200_DEFAULT_TICK_RATE));
 
@@ -621,6 +643,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     _tree->access<std::string>(mb_path / "time_source/value").set("none");
 
     // Set default rates (can't be done in setup_radio() because tick rate is not yet set)
+    ALOG(" ----> 200");
     for (size_t i = 0; i < _radio_perifs.size(); i++) {
         _tree->access<double>(mb_path / "rx_dsps" / str(boost::format("%u") % i)/ "rate/value").set(B200_DEFAULT_RATE);
         _tree->access<double>(mb_path / "tx_dsps" / str(boost::format("%u") % i) / "rate/value").set(B200_DEFAULT_RATE);
@@ -632,6 +655,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     }
 
     //GPS installed: use external ref, time, and init time spec
+    ALOG(" ----> 210");
     if (_gps and _gps->gps_detected())
     {
         UHD_MSG(status) << "Setting references to the internal GPSDO" << std::endl;
@@ -646,6 +670,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
         _tree->access<std::string>(mb_path / "time_source/value").set("internal");
     }
 
+    ALOG(" ----> DONE");
 }
 
 b200_impl::~b200_impl(void)
@@ -946,12 +971,17 @@ void b200_impl::check_fw_compat(void)
 
 void b200_impl::check_fpga_compat(void)
 {
+    ALOG("Compat Check");
     const boost::uint64_t compat = _local_ctrl->peek64(0);
     const boost::uint32_t signature = boost::uint32_t(compat >> 32);
     const boost::uint16_t compat_major = boost::uint16_t(compat >> 16);
     const boost::uint16_t compat_minor = boost::uint16_t(compat & 0xffff);
     if (signature != 0xACE0BA5E) throw uhd::runtime_error(
         "b200::check_fpga_compat signature register readback failed");
+
+    ALOG(boost::str(boost::format("Compat Major:  %1%") % compat_major).c_str());
+    ALOG(boost::str(boost::format("Compat Minor:  %1%") % compat_minor).c_str());
+    ALOG(boost::str(boost::format("Compat Number: %1%") % B200_FPGA_COMPAT_NUM).c_str());
 
     if (compat_major != B200_FPGA_COMPAT_NUM){
         throw uhd::runtime_error(str(boost::format(

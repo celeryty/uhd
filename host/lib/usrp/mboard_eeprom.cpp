@@ -27,8 +27,6 @@
 #include <iostream>
 #include <cstddef>
 
-#include <android/log.h>
-
 using namespace uhd;
 using namespace uhd::usrp;
 
@@ -484,36 +482,20 @@ struct b200_eeprom_map{
 
 static void load_b200(mboard_eeprom_t &mb_eeprom, i2c_iface &iface){
   //extract the revision number
-  __android_log_print(ANDROID_LOG_VERBOSE, "uhd::mboard_eeprom", "Get revision");
   mb_eeprom["revision"] = uint16_bytes_to_string
     (iface.read_eeprom(B200_EEPROM_SLAVE_ADDR, offsetof(b200_eeprom_map, revision), 2));
-  __android_log_print(ANDROID_LOG_VERBOSE, "uhd::mboard_eeprom",
-                      boost::str(boost::format("Got revision: %1%")     \
-                                 % mb_eeprom["revision"]).c_str());
 
   //extract the product code
-  __android_log_print(ANDROID_LOG_VERBOSE, "uhd::mboard_eeprom", "Get product");
   mb_eeprom["product"] = uint16_bytes_to_string
     (iface.read_eeprom(B200_EEPROM_SLAVE_ADDR, offsetof(b200_eeprom_map, product), 2));
-  __android_log_print(ANDROID_LOG_VERBOSE, "uhd::mboard_eeprom",
-                      boost::str(boost::format("Got product: %1%")     \
-                                 % mb_eeprom["product"]).c_str());
 
   //extract the serial
-  __android_log_print(ANDROID_LOG_VERBOSE, "uhd::mboard_eeprom", "Get serial");
   mb_eeprom["serial"] = bytes_to_string
     (iface.read_eeprom(B200_EEPROM_SLAVE_ADDR, offsetof(b200_eeprom_map, serial), SERIAL_LEN));
-  __android_log_print(ANDROID_LOG_VERBOSE, "uhd::mboard_eeprom",
-                      boost::str(boost::format("Got serial: %1%")     \
-                                 % mb_eeprom["serial"]).c_str());
 
   //extract the name
-  __android_log_print(ANDROID_LOG_VERBOSE, "uhd::mboard_eeprom", "Get name");
   mb_eeprom["name"] = bytes_to_string
     (iface.read_eeprom(B200_EEPROM_SLAVE_ADDR, offsetof(b200_eeprom_map, name), NAME_MAX_LEN));
-  __android_log_print(ANDROID_LOG_VERBOSE, "uhd::mboard_eeprom",
-                      boost::str(boost::format("Got name: %1%")     \
-                                 % mb_eeprom["name"]).c_str());
 }
 
 static void store_b200(const mboard_eeprom_t &mb_eeprom, i2c_iface &iface){

@@ -35,6 +35,8 @@
 
 #include <android/log.h>
 
+#define ALOG(x) __android_log_print(ANDROID_LOG_VERBOSE, "uhd::b200_iface", x);
+
 //! libusb_error_name is only in newer API
 #ifndef HAVE_LIBUSB_ERROR_NAME
     #define libusb_error_name(code) \
@@ -258,27 +260,24 @@ public:
         size_t num_bytes) {
         byte_vector_t recv_bytes(num_bytes);
 
-        __android_log_print(ANDROID_LOG_VERBOSE, "uhd::b200_iface", "read_eeprom: bytes_read");
+        ALOG("read_eeprom: bytes_read");
         int bytes_read = fx3_control_read(B200_VREQ_EEPROM_READ,
                          0, offset | (boost::uint16_t(addr) << 8),
                          (unsigned char*) &recv_bytes[0],
                          num_bytes);
-        __android_log_print(ANDROID_LOG_VERBOSE, "uhd::b200_iface",
-                            boost::str(boost::format("   read: %1%") % bytes_read).c_str());
+        ALOG(boost::str(boost::format("   read: %1%") % bytes_read).c_str());
 
         if (bytes_read < 0) {
-          __android_log_print(ANDROID_LOG_VERBOSE, "uhd::b200_iface",
-                              "throw: Failed to read EEPROM");
+          ALOG("throw: Failed to read EEPROM");
           throw uhd::io_error((boost::format("Failed to read EEPROM (%d: %s)") \
                                % bytes_read % libusb_error_name(bytes_read)).str());
         }
         else if ((size_t)bytes_read != num_bytes) {
-          __android_log_print(ANDROID_LOG_VERBOSE, "uhd::b200_iface",
-                              "throw: Short read from EEPROM");
+          ALOG("throw: Short read from EEPROM");
           throw uhd::io_error((boost::format("Short read on read EEPROM (expecting: %d, returned: %d)") % num_bytes % bytes_read).str());
         }
 
-        __android_log_print(ANDROID_LOG_VERBOSE, "uhd::b200_iface", "read_eeprom: returning");
+        ALOG("read_eeprom: returning");
         return recv_bytes;
     }
 

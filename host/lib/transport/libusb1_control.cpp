@@ -44,6 +44,7 @@ public:
     }
 
     ~libusb_control_impl() {
+      ALOG("Closing usb_control");
     }
 
 

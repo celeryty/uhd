@@ -260,7 +260,7 @@ public:
             libusb_release_interface(this->get(), _claimed[i]);
         }
         ALOG("Closing USB device");
-        libusb_close(_handle);
+        //libusb_close(_handle);
         ALOG("    Closed");
     }
 
@@ -375,6 +375,7 @@ std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(
 
 std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(const std::vector<usb_device_handle::vid_pid_pair_t>& vid_pid_pair_list)
 {
+    ALOG("get_device_list: enter");
     std::vector<usb_device_handle::sptr> handles;
     libusb::device_list::sptr dev_list = libusb::device_list::make();
     for(size_t iter = 0; iter < vid_pid_pair_list.size(); ++iter)
@@ -386,5 +387,6 @@ std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(const st
            }
        }
     }
+    ALOG("get_device_list: returning");
     return handles;
 }
