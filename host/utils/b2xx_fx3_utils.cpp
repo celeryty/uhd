@@ -174,7 +174,7 @@ uhd::transport::usb_device_handle::sptr open_device(const boost::uint16_t vid, c
                 vp = known_vid_pid_vector[i];
                 handles = uhd::transport::usb_device_handle::get_device_list(vp.vid, vp.pid);
             }
-           
+
         }
 
         if (handles.size() > 0)
@@ -203,7 +203,7 @@ b200_iface::sptr make_b200_iface(const uhd::transport::usb_device_handle::sptr &
 
     try {
         uhd::transport::usb_control::sptr usb_ctrl = uhd::transport::usb_control::make(handle, 0);
-        b200 = b200_iface::make(usb_ctrl);
+        b200 = b200_iface::make(usb_ctrl, handle);
 
         if (!b200)
             std::cerr << "Cannot create device interface" << std::endl;
@@ -588,4 +588,3 @@ boost::int32_t main(boost::int32_t argc, char *argv[]) {
 
     return 0;
 }
-

@@ -57,8 +57,6 @@ public:
                   boost::int32_t libusb_timeout = 0
     ){
         boost::mutex::scoped_lock lock(_mutex);
-        ALOG(boost::str(boost::format("Calling libusb_control_transfer, length = %1%") \
-                        % length).c_str());
         ssize_t ret = libusb_control_transfer(_handle->get(),
                                               request_type,
                                               request,
@@ -67,8 +65,6 @@ public:
                                               buff,
                                               length,
                                               libusb_timeout);
-        ALOG(boost::str(boost::format("    ret = %1%") \
-                        % ret).c_str());
         return ret;
     }
 

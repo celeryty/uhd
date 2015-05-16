@@ -195,9 +195,28 @@ bool parse_record(const std::string& record, boost::uint16_t &len, \
 class b200_iface_impl : public b200_iface{
 public:
 
-    b200_iface_impl(usb_control::sptr usb_ctrl):
-        _usb_ctrl(usb_ctrl) {
-        //NOP
+  b200_iface_impl(usb_control::sptr usb_ctrl, usb_device_handle::sptr handle):
+      _usb_ctrl(usb_ctrl)
+    {
+      char msg[256];
+      ALOG("b200_iface ctor");
+
+      std::string b200_fw_image = "/sdcard/usrp_b200_fw.hex";
+      std::string b200_fpga_image = "/sdcard/usrp_b200_fpga.bin";
+      ALOG("getting usb device handle");
+      //const usb_device_handle* handle = usb_ctrl->handle();
+      sprintf(msg, "    got usb device handle: %p", handle.get());
+      ALOG(msg);
+      if(!(handle->firmware_loaded())) {
+        ALOG("Loading Firmware");
+        load_firmware(b200_fw_image);
+        ALOG("    ... loaded");
+
+      }
+
+      ALOG("Loading FPGA");
+      load_fpga(b200_fpga_image);
+      ALOG("    ... loaded");
     }
 
     int fx3_control_write(boost::uint8_t request,
@@ -296,95 +315,112 @@ public:
          * libusb calls, and is necessary for FX3's 32-bit addressing. */
         boost::uint16_t upper_address_bits = 0x0000;
 
+        char msg[256];
+        sprintf(msg, "load_firmware: opening file: %s", filename);
+        ALOG(msg);
         std::ifstream file;
         file.open(filename, std::ifstream::in);
 
         if(!file.good()) {
+            ALOG("load_firmware: cannot open firmware file");
             throw uhd::io_error("fx3_load_firmware: cannot open firmware input file");
         }
 
-        if (load_img_msg) UHD_MSG(status) << "Loading firmware image: " \
-            << filestring << "..." << std::flush;
+        if (load_img_msg) {
+          UHD_MSG(status) << "Loading firmware image: " \
+                          << filestring << "..." << std::flush;
+          ALOG("load_firmware: loading firmware image");
+        }
 
         while (!file.eof()) {
-            boost::int32_t ret = 0;
-            std::string record;
-            file >> record;
+          boost::int32_t ret = 0;
+          std::string record;
+          file >> record;
 
-        if (!(record.length() > 0))
+          if (!(record.length() > 0))
             continue;
 
-            /* Check for valid Intel HEX record. */
-            if (!checksum(record) || !parse_record(record, len, \
-                        lower_address_bits, type, data)) {
-                throw uhd::io_error("fx3_load_firmware: bad intel hex record checksum");
+          /* Check for valid Intel HEX record. */
+          if (!checksum(record) || !parse_record(record, len,   \
+                                                 lower_address_bits, type, data)) {
+            ALOG("load_firmware: bad intel hex record checksum");
+            throw uhd::io_error("fx3_load_firmware: bad intel hex record checksum");
+          }
+
+          /* Type 0x00: Data. */
+          if (type == 0x00) {
+            ret = fx3_control_write(FX3_FIRMWARE_LOAD,                  \
+                                    lower_address_bits, upper_address_bits, data, len);
+
+            if (ret < 0) {
+              ALOG("load_firmware: usrp_control_write failed");
+              throw uhd::io_error("usrp_load_firmware: usrp_control_write failed");
+            }
+          }
+
+          /* Type 0x01: EOF. */
+          else if (type == 0x01) {
+            if (lower_address_bits != 0x0000 || len != 0 ) {
+              ALOG("load_firmware: For EOF record, address must be 0, length 0");
+              throw uhd::io_error("fx3_load_firmware: For EOF record, address must be 0, length must be 0.");
             }
 
-            /* Type 0x00: Data. */
-            if (type == 0x00) {
-                ret = fx3_control_write(FX3_FIRMWARE_LOAD, \
-                        lower_address_bits, upper_address_bits, data, len);
+            //TODO
+            //usrp_set_firmware_hash(hash); //set hash before reset
 
-                if (ret < 0) {
-                    throw uhd::io_error("usrp_load_firmware: usrp_control_write failed");
-                }
+            /* Successful termination! */
+            file.close();
+
+            /* Let the system settle. */
+            boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
+            return;
+          }
+
+          /* Type 0x04: Extended Linear Address Record. */
+          else if (type == 0x04) {
+            if (lower_address_bits != 0x0000 || len != 2 ) {
+              ALOG("load_firmware: For ELA record, address must be 0, length 2");
+              throw uhd::io_error("fx3_load_firmware: For ELA record, address must be 0, length must be 2.");
             }
 
-            /* Type 0x01: EOF. */
-            else if (type == 0x01) {
-                if (lower_address_bits != 0x0000 || len != 0 ) {
-                    throw uhd::io_error("fx3_load_firmware: For EOF record, address must be 0, length must be 0.");
-                }
+            upper_address_bits = ((boost::uint16_t)((data[0] & 0x00FF) << 8)) \
+              + ((boost::uint16_t)(data[1] & 0x00FF));
+          }
 
-                //TODO
-                //usrp_set_firmware_hash(hash); //set hash before reset
-
-                /* Successful termination! */
-                file.close();
-
-                /* Let the system settle. */
-                boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
-                return;
+          /* Type 0x05: Start Linear Address Record. */
+          else if (type == 0x05) {
+            if (lower_address_bits != 0x0000 || len != 4 ) {
+              ALOG("load_firmware: For SLA record, address must be 0, length 4");
+              throw uhd::io_error("fx3_load_firmware: For SLA record, address must be 0, length must be 4.");
             }
 
-            /* Type 0x04: Extended Linear Address Record. */
-            else if (type == 0x04) {
-                if (lower_address_bits != 0x0000 || len != 2 ) {
-                    throw uhd::io_error("fx3_load_firmware: For ELA record, address must be 0, length must be 2.");
-                }
+            /* The firmware load is complete.  We now need to tell the CPU
+             * to jump to an execution address start point, now contained within
+             * the data field.  Parse these address bits out, and then push the
+             * instruction. */
+            upper_address_bits = ((boost::uint16_t)((data[0] & 0x00FF) << 8)) \
+              + ((boost::uint16_t)(data[1] & 0x00FF));
+            lower_address_bits = ((boost::uint16_t)((data[2] & 0x00FF) << 8)) \
+              + ((boost::uint16_t)(data[3] & 0x00FF));
 
-                upper_address_bits = ((boost::uint16_t)((data[0] & 0x00FF) << 8))\
-                                     + ((boost::uint16_t)(data[1] & 0x00FF));
+            fx3_control_write(FX3_FIRMWARE_LOAD, lower_address_bits,    \
+                              upper_address_bits, 0, 0);
+
+            if (load_img_msg) {
+              ALOG("load_firmware: done");
+              UHD_MSG(status) << " done" << std::endl;
             }
+          }
 
-            /* Type 0x05: Start Linear Address Record. */
-            else if (type == 0x05) {
-                if (lower_address_bits != 0x0000 || len != 4 ) {
-                    throw uhd::io_error("fx3_load_firmware: For SLA record, address must be 0, length must be 4.");
-                }
-
-                /* The firmware load is complete.  We now need to tell the CPU
-                 * to jump to an execution address start point, now contained within
-                 * the data field.  Parse these address bits out, and then push the
-                 * instruction. */
-                upper_address_bits = ((boost::uint16_t)((data[0] & 0x00FF) << 8))\
-                                     + ((boost::uint16_t)(data[1] & 0x00FF));
-                lower_address_bits = ((boost::uint16_t)((data[2] & 0x00FF) << 8))\
-                                     + ((boost::uint16_t)(data[3] & 0x00FF));
-
-                fx3_control_write(FX3_FIRMWARE_LOAD, lower_address_bits, \
-                        upper_address_bits, 0, 0);
-
-                if (load_img_msg) UHD_MSG(status) << " done" << std::endl;
-            }
-
-            /* If we receive an unknown record type, error out. */
-            else {
-                throw uhd::io_error("fx3_load_firmware: unsupported record type.");
-            }
+          /* If we receive an unknown record type, error out. */
+          else {
+            ALOG("load_firmware: unsupported record type");
+            throw uhd::io_error("fx3_load_firmware: unsupported record type.");
+          }
         }
 
         /* There was no valid EOF. */
+        ALOG("load_firmware: no EOF record found");
         throw uhd::io_error("fx3_load_firmware: No EOF record found.");
     }
 
@@ -553,10 +589,23 @@ public:
         // Make sure that if operating as USB2, requested length is within spec
         int ntoread = std::min(transfer_size, (int)sizeof(out_buff));
         int nread = fx3_control_read(B200_VREQ_LOOP, 0, 0, out_buff, ntoread, 1000);
-        if (nread < 0)
-            throw uhd::io_error((boost::format("load_fpga: unable to complete firmware loopback request (%d: %s)") % nread % libusb_error_name(nread)).str());
-        else if (nread != ntoread)
-            throw uhd::io_error((boost::format("load_fpga: short read on firmware loopback request (expecting: %d, returned: %d)") % ntoread % nread).str());
+        if (nread < 0) {
+          ALOG(boost::str
+               (boost::format("load_fpga: unable to complete firmware loopback request (%d: %s)") \
+                % nread % libusb_error_name(nread)).c_str());
+
+          throw uhd::io_error
+            ((boost::format("load_fpga: unable to complete firmware loopback request (%d: %s)") \
+              % nread % libusb_error_name(nread)).str());
+        }
+        else if (nread != ntoread) {
+          ALOG(boost::str
+               (boost::format("load_fpga: short read on firmware loopback request (expecting: %d, returned: %d)") \
+                % ntoread % nread).c_str());
+          throw uhd::io_error((boost::format("load_fpga: short read on firmware loopback request (expecting: %d, returned: %d)") \
+                               % ntoread % nread).str());
+        }
+
         transfer_size = std::min(transfer_size, nread); // Select the smaller value
 
         size_t file_size = 0;
@@ -569,7 +618,10 @@ public:
         file.open(filename, std::ios::in | std::ios::binary);
 
         if (!file.good()) {
-            throw uhd::io_error("load_fpga: cannot open FPGA input file.");
+          ALOG(boost::str
+               (boost::format("load_fpga: cannot open FGPA input file %1%") \
+                % filename).c_str());
+          throw uhd::io_error("load_fpga: cannot open FPGA input file.");
         }
 
         // Zero the hash, in case we abort programming another image and revert to the previously programmed image
@@ -578,10 +630,22 @@ public:
         memset(out_buff, 0x00, sizeof(out_buff));
         bytes_to_xfer = 1;
         ret = fx3_control_write(B200_VREQ_FPGA_CONFIG, 0, 0, out_buff, bytes_to_xfer, 1000);
-        if (ret < 0)
-            throw uhd::io_error((boost::format("Failed to start FPGA config (%d: %s)") % ret % libusb_error_name(ret)).str());
-        else if (ret != bytes_to_xfer)
-            throw uhd::io_error((boost::format("Short write on start FPGA config (expecting: %d, returned: %d)") % bytes_to_xfer % ret).str());
+        if (ret < 0) {
+          ALOG(boost::str
+               (boost::format("Failed to start FPGA config (%d: %s)") \
+                % ret % libusb_error_name(ret)).c_str());
+
+          throw uhd::io_error((boost::format("Failed to start FPGA config (%d: %s)") \
+                               % ret % libusb_error_name(ret)).str());
+        }
+        else if (ret != bytes_to_xfer) {
+          ALOG(boost::str
+               (boost::format("Short write on start FPGA config (expecting: %d, returned: %d)") \
+                % bytes_to_xfer % ret).c_str());
+
+          throw uhd::io_error((boost::format("Short write on start FPGA config (expecting: %d, returned: %d)") \
+                               % bytes_to_xfer % ret).str());
+        }
 
         wait_count = 0;
         do {
@@ -701,7 +765,8 @@ std::string b200_iface::fx3_state_string(boost::uint8_t state)
 /***********************************************************************
  * Make an instance of the implementation
  **********************************************************************/
-b200_iface::sptr b200_iface::make(usb_control::sptr usb_ctrl)
+b200_iface::sptr b200_iface::make(usb_control::sptr usb_ctrl,
+                                  usb_device_handle::sptr handle)
 {
-    return sptr(new b200_iface_impl(usb_ctrl));
+  return sptr(new b200_iface_impl(usb_ctrl, handle));
 }
