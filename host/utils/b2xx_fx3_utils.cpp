@@ -203,7 +203,7 @@ b200_iface::sptr make_b200_iface(const uhd::transport::usb_device_handle::sptr &
 
     try {
         uhd::transport::usb_control::sptr usb_ctrl = uhd::transport::usb_control::make(handle, 0);
-        b200 = b200_iface::make(usb_ctrl, handle);
+        b200 = b200_iface::make(usb_ctrl);
 
         if (!b200)
             std::cerr << "Cannot create device interface" << std::endl;

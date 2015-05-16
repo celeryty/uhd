@@ -298,14 +298,18 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     //create control objects
     //usb_control::sptr control = usb_control::make(handle, 0);
     usb_control::sptr control = get_usb_control(handle);
+    _iface = b200_iface::make(control);
 
-    char msg[256];
-    sprintf(msg, "Working with handle: %p", handle.get());
-    ALOG(msg);
-    sprintf(msg, "Produced control: %p", control.get());
-    ALOG(msg);
+    ////////////////////////////////////////////////////////////////////
+    // load the device firmware
+    ////////////////////////////////////////////////////////////////////
+    std::string b200_fw_image = "/sdcard/usrp_b200_fw.hex";
+    if(!(handle->firmware_loaded())) {
+      ALOG("Loading Firmware");
+      _iface->load_firmware(b200_fw_image);
+      ALOG("    ... loaded");
+    }
 
-    _iface = b200_iface::make(control, handle);
     this->check_fw_compat(); //check after making
 
     ////////////////////////////////////////////////////////////////////

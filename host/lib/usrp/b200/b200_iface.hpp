@@ -20,7 +20,6 @@
 
 #include <stdint.h>
 #include <uhd/transport/usb_control.hpp>
-#include <uhd/transport/usb_device_handle.hpp>
 #include <uhd/types/serial.hpp> //i2c iface
 #include <boost/shared_ptr.hpp>
 #include <boost/utility.hpp>
@@ -48,8 +47,7 @@ public:
      * \param usb_ctrl a USB control transport
      * \return a new b200 interface object
      */
-    static sptr make(uhd::transport::usb_control::sptr usb_ctrl,
-                     uhd::transport::usb_device_handle::sptr handle);
+    static sptr make(uhd::transport::usb_control::sptr usb_ctrl);
 
     //! query the device USB speed (2, 3)
     virtual boost::uint8_t get_usb_speed(void) = 0;

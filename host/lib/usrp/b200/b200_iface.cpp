@@ -195,16 +195,9 @@ bool parse_record(const std::string& record, boost::uint16_t &len, \
 class b200_iface_impl : public b200_iface{
 public:
 
-  b200_iface_impl(usb_control::sptr usb_ctrl, usb_device_handle::sptr handle):
-      _usb_ctrl(usb_ctrl)
-    {
-      ALOG("b200_iface ctor");
-      std::string b200_fw_image = "/sdcard/usrp_b200_fw.hex";
-      if(!(handle->firmware_loaded())) {
-        ALOG("Loading Firmware");
-        load_firmware(b200_fw_image);
-        ALOG("    ... loaded");
-      }
+    b200_iface_impl(usb_control::sptr usb_ctrl):
+        _usb_ctrl(usb_ctrl) {
+        // NOP
     }
 
     int fx3_control_write(boost::uint8_t request,
@@ -753,8 +746,7 @@ std::string b200_iface::fx3_state_string(boost::uint8_t state)
 /***********************************************************************
  * Make an instance of the implementation
  **********************************************************************/
-b200_iface::sptr b200_iface::make(usb_control::sptr usb_ctrl,
-                                  usb_device_handle::sptr handle)
+b200_iface::sptr b200_iface::make(usb_control::sptr usb_ctrl)
 {
-  return sptr(new b200_iface_impl(usb_ctrl, handle));
+  return sptr(new b200_iface_impl(usb_ctrl));
 }
