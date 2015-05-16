@@ -198,25 +198,13 @@ public:
   b200_iface_impl(usb_control::sptr usb_ctrl, usb_device_handle::sptr handle):
       _usb_ctrl(usb_ctrl)
     {
-      char msg[256];
       ALOG("b200_iface ctor");
-
       std::string b200_fw_image = "/sdcard/usrp_b200_fw.hex";
-      std::string b200_fpga_image = "/sdcard/usrp_b200_fpga.bin";
-      ALOG("getting usb device handle");
-      //const usb_device_handle* handle = usb_ctrl->handle();
-      sprintf(msg, "    got usb device handle: %p", handle.get());
-      ALOG(msg);
       if(!(handle->firmware_loaded())) {
         ALOG("Loading Firmware");
         load_firmware(b200_fw_image);
         ALOG("    ... loaded");
-
       }
-
-      ALOG("Loading FPGA");
-      load_fpga(b200_fpga_image);
-      ALOG("    ... loaded");
     }
 
     int fx3_control_write(boost::uint8_t request,
