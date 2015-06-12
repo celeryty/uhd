@@ -238,7 +238,6 @@ UHD_STATIC_BLOCK(register_b200_device)
 b200_impl::b200_impl(const device_addr_t &device_addr) :
     _tick_rate(0.0) // Forces a clock initialization at startup
 {
-    ALOG("HERE 0");
     _tree = property_tree::make();
     _type = device::USRP;
     const fs_path mb_path = "/mboards/0";
@@ -246,8 +245,10 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     //try to match the given device address with something on the USB bus
     boost::uint16_t vid = B200_VENDOR_ID;
     boost::uint16_t pid = B200_PRODUCT_ID;
+    int fd = 0;
     bool specified_vid = false;
     bool specified_pid = false;
+    //bool specified_fd  = false;
 
     if (device_addr.has_key("vid"))
     {
@@ -259,6 +260,15 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
     {
         pid = uhd::cast::hexstr_cast<boost::uint16_t>(device_addr.get("pid"));
         specified_pid = true;
+    }
+
+    if(device_addr.has_key("fd")) {
+      fd = boost::lexical_cast<int>(device_addr.get("fd"));
+      //specified_fd = true;
+
+      ALOG(boost::str
+           (boost::format("Got USB File Descriptor: %1%")       \
+            % fd).c_str());
     }
 
     std::vector<usb_device_handle::vid_pid_pair_t> vid_pid_pair_list;//search list for devices.
@@ -291,7 +301,7 @@ b200_impl::b200_impl(const device_addr_t &device_addr) :
 
     ALOG("getting device list (3)");
     std::vector<usb_device_handle::sptr> device_list = \
-      usb_device_handle::get_device_list(vid_pid_pair_list);
+      usb_device_handle::get_device_list(vid_pid_pair_list, fd);
     usb_device_handle::sptr handle = device_list[0];
     ALOG("got device list (3)");
 

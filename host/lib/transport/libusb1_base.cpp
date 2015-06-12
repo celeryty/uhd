@@ -129,9 +129,18 @@ public:
         return _dev;
     }
 
+    int get_fd() const {
+      return _fd;
+    }
+
+    void set_fd(int fd) {
+      _fd = fd;
+    }
+
 private:
     libusb::session::sptr _session; //always keep a reference to session
     libusb_device *_dev;
+    int _fd;
 };
 
 /***********************************************************************
@@ -246,9 +255,14 @@ class libusb_device_handle_impl : public libusb::device_handle{
 public:
     libusb_device_handle_impl(libusb::device::sptr dev){
         _dev = dev;
-        //ALOG("libusb_device_handle_impl called");
+        ALOG("libusb_device_handle_impl ctor");
+
+        ALOG(boost::str
+             (boost::format("  Using File Descriptor: %1%")     \
+              % _dev->get_fd()).c_str());
+
         //UHD_ASSERT_THROW(libusb_open(_dev->get(), &_handle) == 0);
-        UHD_ASSERT_THROW(libusb_open2(_dev->get(), &_handle, 21) == 0);
+        UHD_ASSERT_THROW(libusb_open2(_dev->get(), &_handle, _dev->get_fd()) == 0);
         //ALOG("libusb_device_handle_impl returning");
     }
 
@@ -323,8 +337,9 @@ libusb::special_handle::~special_handle(void){
 
 class libusb_special_handle_impl : public libusb::special_handle{
 public:
-    libusb_special_handle_impl(libusb::device::sptr dev){
+    libusb_special_handle_impl(libusb::device::sptr dev, int fd){
         _dev = dev;
+        _dev->set_fd(fd);
     }
 
     libusb::device::sptr get_device(void) const{
@@ -356,24 +371,29 @@ public:
                (get_manufacturer() == "Free Software Folks");
     }
 
+    int get_fd() const {
+      return this->get_device()->get_fd();
+    }
+
 private:
     libusb::device::sptr _dev; //always keep a reference to device
 };
 
-libusb::special_handle::sptr libusb::special_handle::make(device::sptr dev){
-    return sptr(new libusb_special_handle_impl(dev));
+libusb::special_handle::sptr libusb::special_handle::make(device::sptr dev, int fd){
+  return sptr(new libusb_special_handle_impl(dev, fd));
 }
 
 /***********************************************************************
  * list device handles implementations
  **********************************************************************/
 std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(
-    boost::uint16_t vid, boost::uint16_t pid
+    boost::uint16_t vid, boost::uint16_t pid, int fd
 ){
-    return usb_device_handle::get_device_list(std::vector<usb_device_handle::vid_pid_pair_t>(1,usb_device_handle::vid_pid_pair_t(vid,pid)));
+  return usb_device_handle::get_device_list(std::vector<usb_device_handle::vid_pid_pair_t>(1,usb_device_handle::vid_pid_pair_t(vid,pid)), fd);
 }
 
-std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(const std::vector<usb_device_handle::vid_pid_pair_t>& vid_pid_pair_list)
+std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(
+    const std::vector<usb_device_handle::vid_pid_pair_t>& vid_pid_pair_list, int fd)
 {
     ALOG("get_device_list: enter");
     std::vector<usb_device_handle::sptr> handles;
@@ -381,7 +401,7 @@ std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(const st
     for(size_t iter = 0; iter < vid_pid_pair_list.size(); ++iter)
     {
        for (size_t i = 0; i < dev_list->size(); i++){
-           usb_device_handle::sptr handle = libusb::special_handle::make(dev_list->at(i));
+           usb_device_handle::sptr handle = libusb::special_handle::make(dev_list->at(i), fd);
            if (handle->get_vendor_id() == vid_pid_pair_list[iter].first and handle->get_product_id() == vid_pid_pair_list[iter].second){
                handles.push_back(handle);
            }
