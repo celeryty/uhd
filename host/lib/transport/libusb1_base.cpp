@@ -42,7 +42,11 @@ libusb::session::~session(void) {
 class libusb_session_impl : public libusb::session{
 public:
     libusb_session_impl(void){
+#if ANDROID
+        UHD_ASSERT_THROW(libusb_init2(&_context, "/dev/bus/usb") == 0);
+#else
         UHD_ASSERT_THROW(libusb_init(&_context) == 0);
+#endif
         libusb_set_debug(_context, debug_level);
         task_handler = task::make(boost::bind(&libusb_session_impl::libusb_event_handler_task, this, _context));
     }
@@ -129,9 +133,21 @@ public:
         return _dev;
     }
 
+#if ANDROID
+    int get_fd() const {
+        return _fd;
+    }
+
+    void set_fd(int fd) {
+        _fd = fd;
+    }
+#endif
 private:
     libusb::session::sptr _session; //always keep a reference to session
     libusb_device *_dev;
+#if ANDROID
+    int _fd;
+#endif
 };
 
 /***********************************************************************
@@ -242,7 +258,11 @@ class libusb_device_handle_impl : public libusb::device_handle{
 public:
     libusb_device_handle_impl(libusb::device::sptr dev){
         _dev = dev;
+#if ANDROID
+        UHD_ASSERT_THROW(libusb_open2(_dev->get(), &_handle, _dev->get_fd()) == 0);
+#else
         UHD_ASSERT_THROW(libusb_open(_dev->get(), &_handle) == 0);
+#endif
     }
 
     ~libusb_device_handle_impl(void){
@@ -250,7 +270,11 @@ public:
         for (size_t i = 0; i < _claimed.size(); i++){
             libusb_release_interface(this->get(), _claimed[i]);
         }
+#if ANDROID
+        UHD_LOG << "We're using Android, so don't close the USB handle" << std::endl;
+#else
         libusb_close(_handle);
+#endif
     }
 
     libusb_device_handle *get(void) const{
@@ -258,7 +282,11 @@ public:
     }
 
     void claim_interface(int interface){
+#if ANDROID
+        UHD_LOG << "We're using Android, so just assume we have successfully claimed the USB interface" << std::endl;
+#else
         UHD_ASSERT_THROW(libusb_claim_interface(this->get(), interface) == 0);
+#endif
         _claimed.push_back(interface);
     }
 
@@ -323,9 +351,16 @@ libusb::special_handle::~special_handle(void){
 
 class libusb_special_handle_impl : public libusb::special_handle{
 public:
+#if ANDROID
+    libusb_special_handle_impl(libusb::device::sptr dev, int fd){
+        _dev = dev;
+        _dev->set_fd(fd);
+    }
+#else
     libusb_special_handle_impl(libusb::device::sptr dev){
         _dev = dev;
     }
+#endif
 
     libusb::device::sptr get_device(void) const{
         return _dev;
@@ -356,23 +391,42 @@ public:
                (get_manufacturer() == "National Instruments Corp.") or
                (get_manufacturer() == "Free Software Folks");
     }
+#if ANDROID
+    int get_fd() const {
+        return this->get_device()->get_fd();
+    }
+#endif
 
 private:
     libusb::device::sptr _dev; //always keep a reference to device
 };
 
+#if ANDROID
+libusb::special_handle::sptr libusb::special_handle::make(device::sptr dev, int fd){
+    return sptr(new libusb_special_handle_impl(dev, fd));
+}
+#else
 libusb::special_handle::sptr libusb::special_handle::make(device::sptr dev){
     return sptr(new libusb_special_handle_impl(dev));
 }
+#endif
 
 /***********************************************************************
  * list device handles implementations
  **********************************************************************/
+#if ANDROID
+std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(
+    boost::uint16_t vid, boost::uint16_t pid, int fd, std::string usbfs_path
+){
+    return usb_device_handle::get_device_list(std::vector<usb_device_handle::vid_pid_pair_t>(1,usb_device_handle::vid_pid_pair_t(vid,pid,fd,usbfs_path)));
+}
+#else
 std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(
     boost::uint16_t vid, boost::uint16_t pid
 ){
     return usb_device_handle::get_device_list(std::vector<usb_device_handle::vid_pid_pair_t>(1,usb_device_handle::vid_pid_pair_t(vid,pid)));
 }
+#endif
 
 std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(const std::vector<usb_device_handle::vid_pid_pair_t>& vid_pid_pair_list)
 {
@@ -381,8 +435,14 @@ std::vector<usb_device_handle::sptr> usb_device_handle::get_device_list(const st
     for(size_t iter = 0; iter < vid_pid_pair_list.size(); ++iter)
     {
        for (size_t i = 0; i < dev_list->size(); i++){
+#if ANDROID
+           // TODO use usbfs_path (vid_pid_pair_list[iter].get<3>())
+           usb_device_handle::sptr handle = libusb::special_handle::make(dev_list->at(i), vid_pid_pair_list[iter].get<2>());
+           if (handle->get_vendor_id() == vid_pid_pair_list[iter].get<0>() and handle->get_product_id() == vid_pid_pair_list[iter].get<1>()){
+#else
            usb_device_handle::sptr handle = libusb::special_handle::make(dev_list->at(i));
            if (handle->get_vendor_id() == vid_pid_pair_list[iter].first and handle->get_product_id() == vid_pid_pair_list[iter].second){
+#endif
                handles.push_back(handle);
            }
        }

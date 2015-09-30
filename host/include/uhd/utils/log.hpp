@@ -18,6 +18,7 @@
 #ifndef INCLUDED_UHD_UTILS_LOG_HPP
 #define INCLUDED_UHD_UTILS_LOG_HPP
 
+//#define UHD_LOG_LEVEL=1
 #include <uhd/config.hpp>
 #include <uhd/utils/pimpl.hpp>
 #include <boost/current_function.hpp>
@@ -111,6 +112,9 @@ namespace uhd{ namespace _log{
     private:
         std::ostringstream _ss;
         bool _log_it;
+#if ANDROID
+        verbosity_t verb;
+#endif
     };
 
 }} //namespace uhd::_log

@@ -15,6 +15,13 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+#if ANDROID
+#include <android/log.h>
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "UHD", __VA_ARGS__)
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "UHD", __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, "UHD", __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "UHD", __VA_ARGS__)
+#endif
 #include <uhd/utils/log.hpp>
 #include <uhd/utils/msg.hpp>
 #include <uhd/utils/static.hpp>
@@ -134,6 +141,9 @@ uhd::_log::log::log(
     const std::string &function
     )
 {
+#if ANDROID
+    verb = verbosity;
+#endif
     _log_it = (verbosity >= log_rs().level);
     if (_log_it)
     {
@@ -158,6 +168,16 @@ uhd::_log::log::~log(void)
         return;
 
     _ss << std::endl;
+#if ANDROID
+        if(verb>= 4)
+            LOGD(_ss.str().c_str());
+        else if(verb>= 3)
+            LOGI(_ss.str().c_str());
+        else if(verb>= 2)
+            LOGW(_ss.str().c_str());
+        else
+            LOGE(_ss.str().c_str());
+#else
     try{
         log_rs().log_to_file(_ss.str());
     }
@@ -174,4 +194,5 @@ uhd::_log::log::~log(void)
             << "Logging has been disabled for this process" << std::endl
         ;
     }
+#endif
 }
